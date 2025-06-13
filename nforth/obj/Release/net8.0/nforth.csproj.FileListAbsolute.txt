@@ -1,0 +1,15 @@
+C:\Users\n_fuk\source\repos\nforth\nforth\bin\Release\net8.0\nforth.exe
+C:\Users\n_fuk\source\repos\nforth\nforth\bin\Release\net8.0\nforth.deps.json
+C:\Users\n_fuk\source\repos\nforth\nforth\bin\Release\net8.0\nforth.runtimeconfig.json
+C:\Users\n_fuk\source\repos\nforth\nforth\bin\Release\net8.0\nforth.dll
+C:\Users\n_fuk\source\repos\nforth\nforth\bin\Release\net8.0\nforth.pdb
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.AssemblyInfoInputs.cache
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.AssemblyInfo.cs
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.csproj.CoreCompileInputs.cache
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.dll
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\refint\nforth.dll
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.pdb
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.genruntimeconfig.cache
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\ref\nforth.dll
+C:\Users\n_fuk\source\repos\nforth\nforth\obj\Release\net8.0\nforth.sourcelink.json

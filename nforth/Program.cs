@@ -36,14 +36,14 @@ namespace ForthConsole
             {
                 var token = tokens[ip];
 
-                // Definition
+                // Word definition
                 if (string.Equals(token, ":", StringComparison.OrdinalIgnoreCase))
                 {
                     ip++;
                     var name = tokens[ip];
                     var body = new List<string>();
                     ip++;
-                    while (ip < tokens.Count && !tokens[ip].Equals(";"))
+                    while (ip < tokens.Count && tokens[ip] != ";")
                     {
                         body.Add(tokens[ip]);
                         ip++;
@@ -59,7 +59,7 @@ namespace ForthConsole
                     continue;
                 }
 
-                // Control flow words
+                // Control Flow
                 switch (token.ToUpperInvariant())
                 {
                     case "IF": HandleIf(tokens, ref ip); continue;
@@ -96,17 +96,15 @@ namespace ForthConsole
                                 loopStack.Pop();
                             continue;
                         }
-                    case "I": dataStack.Push(loopStack.Count > 0 ? (object)loopStack.Peek().Index : 0); continue;
+                    case "I": dataStack.Push(loopStack.Peek().Index); continue;
                     case "J":
                         {
-                            if (loopStack.Count < 2) throw new InvalidOperationException("J requires nested DO");
                             var arr = loopStack.ToArray();
                             dataStack.Push(arr[1].Index);
                             continue;
                         }
                     case "LEAVE":
                         {
-                            if (loopStack.Count == 0) throw new InvalidOperationException("LEAVE without DO");
                             loopStack.Pop();
                             ip = FindMatching(tokens, ip, "DO", "LOOP", "+LOOP");
                             continue;
@@ -115,8 +113,9 @@ namespace ForthConsole
                     case "UNTIL":
                         {
                             int flag = Convert.ToInt32(Pop());
-                            int beginIp = beginStack.Peek();
-                            if (flag == 0) ip = beginIp; else beginStack.Pop();
+                            int startIp = beginStack.Peek();
+                            if (flag == 0) ip = startIp;
+                            else beginStack.Pop();
                             continue;
                         }
                     case "WHILE":
@@ -127,8 +126,7 @@ namespace ForthConsole
                         }
                     case "REPEAT":
                         {
-                            if (beginStack.Count == 0) throw new InvalidOperationException("REPEAT without BEGIN");
-                            ip = beginStack.Peek();
+                            ip = beginStack.Pop();
                             continue;
                         }
                     case "STOP": Environment.Exit(0); continue;
@@ -142,15 +140,22 @@ namespace ForthConsole
                     continue;
                 }
 
-                // Date/time literal
-                var dateFormats = new[] { "yyyy-MM-dd", "yyyy/M/d", "yyyy-M-d", "yyyy/MM/dd", "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss" };
-                if (DateTime.TryParseExact(token, dateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+                // DateTime literal
+                var dtFormats = new[] { "yyyy-MM-dd", "yyyy/M/d", "yyyy-M-d", "yyyy/MM/dd", "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss" };
+                if (DateTime.TryParseExact(token, dtFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
                 {
                     dataStack.Push(dt);
                     continue;
                 }
 
-                // Number literal
+                // TimeSpan literal
+                if (token.StartsWith("T") && TimeSpan.TryParseExact(token.Substring(1), new[] { @"h\:mm", @"hh\:mm", @"h\:mm\:ss", @"hh\:mm\:ss" }, CultureInfo.InvariantCulture, out var ts))
+                {
+                    dataStack.Push(ts);
+                    continue;
+                }
+
+                // Number
                 if (double.TryParse(token, NumberStyles.Any, CultureInfo.InvariantCulture, out double num))
                 {
                     dataStack.Push(num);
@@ -175,8 +180,25 @@ namespace ForthConsole
             var buf = string.Empty;
             foreach (var ch in input)
             {
-                if (ch == '"') { inQuote = !inQuote; buf += ch; if (!inQuote) { list.Add(buf); buf = string.Empty; } continue; }
-                if (!inQuote && char.IsWhiteSpace(ch)) { if (buf.Length > 0) { list.Add(buf); buf = string.Empty; } }
+                if (ch == '"')
+                {
+                    inQuote = !inQuote;
+                    buf += ch;
+                    if (!inQuote)
+                    {
+                        list.Add(buf);
+                        buf = string.Empty;
+                    }
+                    continue;
+                }
+                if (!inQuote && char.IsWhiteSpace(ch))
+                {
+                    if (buf.Length > 0)
+                    {
+                        list.Add(buf);
+                        buf = string.Empty;
+                    }
+                }
                 else buf += ch;
             }
             if (buf.Length > 0) list.Add(buf);
@@ -185,14 +207,18 @@ namespace ForthConsole
 
         static void HandleIf(List<string> tokens, ref int ip)
         {
-            int flag = Convert.ToInt32(Pop()); if (flag != 0) return;
+            if (Convert.ToInt32(Pop()) != 0) return;
             int depth = 1;
             for (int i = ip + 1; i < tokens.Count; i++)
             {
                 var t = tokens[i].ToUpperInvariant();
                 if (t == "IF") depth++;
                 else if (t == "ELSE" && depth == 1) { ip = i; return; }
-                else if (t == "THEN") { depth--; if (depth == 0) { ip = i; return; } }
+                else if (t == "THEN")
+                {
+                    depth--;
+                    if (depth == 0) { ip = i; return; }
+                }
             }
             throw new InvalidOperationException("IF without matching THEN");
         }
@@ -204,21 +230,26 @@ namespace ForthConsole
             {
                 var t = tokens[i].ToUpperInvariant();
                 if (t == target && depth == 1) { ip = i; return; }
-                else if (t == "IF") depth++; else if (t == "THEN") depth--;
+                else if (t == "IF") depth++;
+                else if (t == "THEN") depth--;
             }
             throw new InvalidOperationException($"No matching {target}");
         }
 
-        static int FindMatching(List<string> tokens, int ip, string startWord, params string[] endWords)
+        static int FindMatching(List<string> tokens, int ip, string start, params string[] ends)
         {
             int depth = 1;
             for (int i = ip + 1; i < tokens.Count; i++)
             {
                 var t = tokens[i].ToUpperInvariant();
-                if (t == startWord) depth++;
-                else if (endWords.Contains(t)) { depth--; if (depth == 0) return i; }
+                if (t == start) depth++;
+                else if (ends.Contains(t))
+                {
+                    depth--;
+                    if (depth == 0) return i;
+                }
             }
-            throw new InvalidOperationException($"No matching end for {startWord}");
+            throw new InvalidOperationException($"No matching end for {start}");
         }
 
         static object Pop() => dataStack.Pop();
@@ -226,35 +257,37 @@ namespace ForthConsole
 
         static void InitializeWords()
         {
-            // Customized output to format DateTime
             Action<object> writeObj = obj =>
             {
                 if (obj is DateTime d)
                 {
-                    if (d.TimeOfDay == TimeSpan.Zero)
-                        Console.WriteLine(d.ToString("yyyy-MM-dd"));
-                    else if (d.Second == 0)
-                        Console.WriteLine(d.ToString("yyyy-MM-dd' 'HH:mm"));
-                    else
-                        Console.WriteLine(d.ToString("yyyy-MM-dd' 'HH:mm:ss"));
+                    // Always display full date and time as yyyy-MM-dd HH:mm:ss
+                    Console.WriteLine(d.ToString("yyyy-MM-dd HH:mm:ss"));
                 }
-                else Console.WriteLine(obj);
+                else
+                {
+                    Console.WriteLine(obj);
+                }
             };
 
-            // Stack ops
+            // Stack operations
             words["."] = () => writeObj(Pop());
             words[".S"] = () =>
             {
                 var arr = dataStack.Reverse().ToArray();
                 Console.Write("<" + arr.Length + "> ");
-                Console.WriteLine(string.Join(" ", arr.Select(o => o is DateTime dt ?
-                    (dt.TimeOfDay == TimeSpan.Zero ? dt.ToString("yyyy-MM-dd") :
-                     dt.Second == 0 ? dt.ToString("yyyy-MM-dd'T'HH:mm") : dt.ToString("yyyy-MM-dd'T'HH:mm:ss"))
-                    : o.ToString())));
+                Console.WriteLine(string.Join(" ", arr.Select(o =>
+                    o is DateTime dt
+                        ? (dt.TimeOfDay == TimeSpan.Zero
+                            ? dt.ToString("yyyy-MM-dd")
+                            : dt.Second == 0
+                                ? dt.ToString("yyyy-MM-dd'T'HH:mm")
+                                : dt.ToString("yyyy-MM-dd'T'HH:mm:ss"))
+                        : o.ToString())));
             };
             words["swap"] = () => { var b = Pop(); var a = Pop(); dataStack.Push(b); dataStack.Push(a); };
             words["dup"] = () => dataStack.Push(Peek());
-            words["-dup"] = () => { var a = Peek(); if (!IsZero(a)) dataStack.Push(a); };
+            words["-dup"] = () => { var a = Peek(); if (!Convert.ToDouble(a).Equals(0)) dataStack.Push(a); };
             words["?dup"] = words["-dup"];
             words["over"] = () => { var arr = dataStack.ToArray(); dataStack.Push(arr[1]); };
             words["rot"] = () => { var c = Pop(); var b = Pop(); var a = Pop(); dataStack.Push(b); dataStack.Push(c); dataStack.Push(a); };
@@ -271,37 +304,46 @@ namespace ForthConsole
             words[">r"] = () => returnStack.Push(Pop());
             words["r>"] = () => dataStack.Push(returnStack.Pop());
 
-            // Input/output
+            // I/O
             words["input"] = () => dataStack.Push(Console.ReadLine());
             words["get"] = () => dataStack.Push(Console.ReadKey(true).KeyChar.ToString());
 
-            // Arithmetic & logic (including date-aware + and -)
+            // now
+            words["now"] = () => dataStack.Push(DateTime.Now);
+
+            // Arithmetic & logic
             words["+"] = () =>
             {
-                var b = Pop(); var a = Pop();
-                if (a is DateTime da && (b is double || b is int)) dataStack.Push(da.AddDays(Convert.ToDouble(b)));
-                else if (a is double && b is DateTime db) dataStack.Push(db.AddDays(Convert.ToDouble(a)));
-                else dataStack.Push(Convert.ToDouble(a) + Convert.ToDouble(b));
+                var o2 = Pop(); var o1 = Pop();
+                if (o1 is DateTime d1 && o2 is TimeSpan t2) dataStack.Push(d1.Add(t2));
+                else if (o1 is TimeSpan t1 && (o2 is TimeSpan || o2 is double))
+                {
+                    if (o2 is TimeSpan t2b) dataStack.Push(t1 + t2b);
+                    else dataStack.Push(t1.Add(TimeSpan.FromDays(Convert.ToDouble(o2))));
+                }
+                else if (o1 is DateTime d2 && (o2 is double)) dataStack.Push(d2.AddDays(Convert.ToDouble(o2)));
+                else dataStack.Push(Convert.ToDouble(o1) + Convert.ToDouble(o2));
             };
             words["-"] = () =>
             {
-                var b = Pop(); var a = Pop();
-                if (a is DateTime da && b is DateTime db) dataStack.Push((da - db).TotalDays);
-                else if (a is DateTime da2) dataStack.Push(da2.AddDays(-Convert.ToDouble(b)));
-                else dataStack.Push(Convert.ToDouble(a) - Convert.ToDouble(b));
+                var o2 = Pop(); var o1 = Pop();
+                if (o1 is DateTime d1 && o2 is TimeSpan ts) dataStack.Push(d1.Subtract(ts));
+                else if (o1 is DateTime d3 && o2 is DateTime d4) dataStack.Push((d3 - d4).TotalDays);
+                else if (o1 is TimeSpan ts1 && o2 is TimeSpan ts2) dataStack.Push(ts1 - ts2);
+                else dataStack.Push(Convert.ToDouble(o1) - Convert.ToDouble(o2));
             };
-            words["*"] = () => { var b2 = Convert.ToDouble(Pop()); var a2 = Convert.ToDouble(Pop()); dataStack.Push(a2 * b2); };
-            words["/"] = () => { var b2 = Convert.ToDouble(Pop()); var a2 = Convert.ToDouble(Pop()); dataStack.Push(a2 / b2); };
-            words["mod"] = () => { var b2 = Convert.ToDouble(Pop()); var a2 = Convert.ToDouble(Pop()); dataStack.Push(a2 % b2); };
-            words["/mod"] = () => { var b2 = Convert.ToDouble(Pop()); var a2 = Convert.ToDouble(Pop()); var q = Math.Floor(a2 / b2); var r2 = a2 - q * b2; dataStack.Push(r2); dataStack.Push(q); };
+            words["*"] = () => { var b = Convert.ToDouble(Pop()); var a = Convert.ToDouble(Pop()); dataStack.Push(a * b); };
+            words["/"] = () => { var b = Convert.ToDouble(Pop()); var a = Convert.ToDouble(Pop()); dataStack.Push(a / b); };
+            words["mod"] = () => { var b = Convert.ToDouble(Pop()); var a = Convert.ToDouble(Pop()); dataStack.Push(a % b); };
+            words["/mod"] = () => { var b = Convert.ToDouble(Pop()); var a = Convert.ToDouble(Pop()); var q = Math.Floor(a / b); var r = a - q * b; dataStack.Push(r); dataStack.Push(q); };
             words["pow"] = () => { var exp = Convert.ToDouble(Pop()); var bas = Convert.ToDouble(Pop()); dataStack.Push(Math.Pow(bas, exp)); };
             words["**"] = words["pow"];
             words["minus"] = () => dataStack.Push(-Convert.ToDouble(Pop()));
-            words["="] = () => { var b3 = Convert.ToDouble(Pop()); var a3 = Convert.ToDouble(Pop()); dataStack.Push(a3 == b3 ? 1 : 0); };
-            words["<"] = () => { var b3 = Convert.ToDouble(Pop()); var a3 = Convert.ToDouble(Pop()); dataStack.Push(a3 < b3 ? 1 : 0); };
-            words[">"] = () => { var b3 = Convert.ToDouble(Pop()); var a3 = Convert.ToDouble(Pop()); dataStack.Push(a3 > b3 ? 1 : 0); };
-            words["and"] = () => { var b4 = Convert.ToInt32(Pop()); var a4 = Convert.ToInt32(Pop()); dataStack.Push(a4 & b4); };
-            words["or"] = () => { var b4 = Convert.ToInt32(Pop()); var a4 = Convert.ToInt32(Pop()); dataStack.Push(a4 | b4); };
+            words["="] = () => { var b = Convert.ToDouble(Pop()); var a = Convert.ToDouble(Pop()); dataStack.Push(a == b ? 1 : 0); };
+            words["<"] = () => { var b = Convert.ToDouble(Pop()); var a = Convert.ToDouble(Pop()); dataStack.Push(a < b ? 1 : 0); };
+            words[">"] = () => { var b = Convert.ToDouble(Pop()); var a = Convert.ToDouble(Pop()); dataStack.Push(a > b ? 1 : 0); };
+            words["and"] = () => { var b = Convert.ToInt32(Pop()); var a = Convert.ToInt32(Pop()); dataStack.Push(a & b); };
+            words["or"] = () => { var b = Convert.ToInt32(Pop()); var a = Convert.ToInt32(Pop()); dataStack.Push(a | b); };
             words["not"] = () => dataStack.Push(Convert.ToInt32(Pop()) == 0 ? 1 : 0);
 
             // Math functions
@@ -327,9 +369,12 @@ namespace ForthConsole
             words["e"] = () => dataStack.Push(Math.E);
             words["pi"] = () => dataStack.Push(Math.PI);
         }
-
-        static bool IsZero(object v) => Convert.ToDouble(v) == 0;
     }
 
-    class LoopContext { public int Index; public int Limit; public int BeginIp; }
+    class LoopContext
+    {
+        public int Index;
+        public int Limit;
+        public int BeginIp;
+    }
 }

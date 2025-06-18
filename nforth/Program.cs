@@ -261,8 +261,16 @@ namespace ForthConsole
             {
                 if (obj is DateTime d)
                 {
-                    // Always display full date and time as yyyy-MM-dd HH:mm:ss
+                    // Always display full date and time
                     Console.WriteLine(d.ToString("yyyy-MM-dd HH:mm:ss"));
+                }
+                else if (obj is TimeSpan ts)
+                {
+                    // Format TimeSpan with sign: -0000-00-DDTHH:MM:SS
+                    var sign = ts < TimeSpan.Zero ? "-" : string.Empty;
+                    var abs = ts.Duration();
+                    Console.WriteLine(string.Format("{0}{1:0000}-{2:00}-{3:00}T{4:00}:{5:00}:{6:00}",
+                        sign, 0, 0, abs.Days, abs.Hours, abs.Minutes, abs.Seconds));
                 }
                 else
                 {
@@ -328,7 +336,7 @@ namespace ForthConsole
             {
                 var o2 = Pop(); var o1 = Pop();
                 if (o1 is DateTime d1 && o2 is TimeSpan ts) dataStack.Push(d1.Subtract(ts));
-                else if (o1 is DateTime d3 && o2 is DateTime d4) dataStack.Push((d3 - d4).TotalDays);
+                else if (o1 is DateTime d3 && o2 is DateTime d4) dataStack.Push(d3 - d4);
                 else if (o1 is TimeSpan ts1 && o2 is TimeSpan ts2) dataStack.Push(ts1 - ts2);
                 else dataStack.Push(Convert.ToDouble(o1) - Convert.ToDouble(o2));
             };
